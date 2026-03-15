@@ -39,8 +39,16 @@
             </router-link>
           </div>
 
-          <button type="submit" class="login-btn">Login</button>
+          <button type="submit" class="login-btn" :disabled="loading">
+            {{ loading ? 'Logging in...' : 'Login' }}
+          </button>
         </form>
+        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+
+        <div class="auth-footer">
+          <span>Don't have an account?</span>
+          <router-link to="/signup" class="signup-link">Sign Up</router-link>
+        </div>
       </div>
     </section>
   </div>
@@ -49,22 +57,57 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { signIn } from '@aws-amplify/auth'
+
+const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
 
 const router = useRouter()
 
 const email = ref('')
 const password = ref('')
 const remember = ref(false)
+const errorMessage = ref('')
+const loading = ref(false)
 
-const handleLogin = () => {
-  console.log({
-    email: email.value,
-    password: password.value,
-    remember: remember.value,
-  })
+const handleLogin = async () => {
+  errorMessage.value = ''
+  if (!email.value || !password.value) {
+    errorMessage.value = '请输入邮箱和密码。'
+    return
+  }
 
-  // temporary routing after login
-  router.push('/home')
+  loading.value = true
+  try {
+    if (useCognito) {
+      await signIn({
+        username: email.value,
+        password: password.value,
+      })
+      router.push('/home')
+      return
+    }
+
+    // 本地开发模式登录演示
+    if (email.value === 'test@demo.com' && password.value === 'Test1234') {
+      router.push('/home')
+      return
+    }
+
+    errorMessage.value = '本地测试模式：请使用 test@demo.com / Test1234，或设置 VITE_USE_COGNITO=true 来启用 Cognito。'
+  } catch (err) {
+    console.error('登录失败', err)
+    if (err.name === 'UserNotConfirmedException') {
+      errorMessage.value = '账号未激活，请检查邮箱确认链接。'
+    } else if (err.name === 'NotAuthorizedException') {
+      errorMessage.value = '密码错误，请重试。'
+    } else if (err.name === 'UserNotFoundException') {
+      errorMessage.value = '用户不存在，请先注册。'
+    } else {
+      errorMessage.value = err.message || err || '登录失败，请稍后再试。'
+    }
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -220,24 +263,30 @@ const handleLogin = () => {
   opacity: 0.95;
 }
 
-@media (max-width: 1100px) {
-  .page {
-    grid-template-columns: 1fr;
-  }
+.error-message {
+  margin-top: 0.8rem;
+  color: #dd3333;
+  font-weight: 600;
+  text-align: center;
+}
 
-  .brand-panel {
-    min-height: 30vh;
-    padding: 3rem 2rem;
-  }
+.auth-footer {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  font-size: 1.05rem;
+  color: #333;
+}
 
-  .form-panel {
-    padding: 1.5rem;
-  }
+.signup-link {
+  color: #1118ff;
+  text-decoration: none;
+  font-weight: 600;
+}
 
-  .login-card {
-    min-height: auto;
-    padding: 4rem 1.5rem 2rem;
-  }
+.signup-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 640px) {
