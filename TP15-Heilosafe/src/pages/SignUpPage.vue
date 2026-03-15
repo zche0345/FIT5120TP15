@@ -13,8 +13,8 @@
         <p class="helper-text">
           {{
             isConfirmStep
-              ? 'Enter the verification code sent to your email to finish registration.'
-              : 'Sign up to receive personalized UV protection insights.'
+              ? 'Drop in the code from your email and you are good to go.'
+              : 'Sign up, stay UV-aware, and make sunscreen your main-character move.'
           }}
         </p>
 
@@ -52,7 +52,7 @@
           />
 
           <button type="submit" class="primary-btn" :disabled="loading">
-            {{ loading ? 'Creating account...' : 'Sign Up' }}
+            {{ loading ? 'Setting you up...' : 'Sign Up' }}
           </button>
         </form>
 
@@ -67,7 +67,7 @@
           />
 
           <button type="submit" class="primary-btn" :disabled="loading">
-            {{ loading ? 'Confirming...' : 'Confirm Sign Up' }}
+            {{ loading ? 'Confirming...' : 'Verify My Account' }}
           </button>
         </form>
 
@@ -76,10 +76,10 @@
 
         <div class="auth-footer">
           <router-link v-if="!isConfirmStep" to="/login" class="auth-link">
-            Already have an account? Login
+            Already have an account? Log in
           </router-link>
           <button v-else type="button" class="text-btn" @click="router.push('/login')">
-            Back to Login
+            Back to login
           </button>
         </div>
       </div>
@@ -124,15 +124,15 @@ const validateUsername = () => {
   const trimmedUsername = username.value.trim()
 
   if (!trimmedUsername) {
-    return 'Please enter a username.'
+    return 'Pick a username first.'
   }
 
   if (trimmedUsername.includes('@')) {
-    return 'Username cannot be an email address.'
+    return 'Your username cannot be an email address.'
   }
 
   if (!/^[a-zA-Z0-9._-]{3,20}$/.test(trimmedUsername)) {
-    return 'Username must be 3-20 characters and use only letters, numbers, dot, underscore, or hyphen.'
+    return 'Your username should be 3-20 characters and only use letters, numbers, dots, underscores, or hyphens.'
   }
 
   return ''
@@ -140,11 +140,11 @@ const validateUsername = () => {
 
 const validatePassword = () => {
   if (password.value.length < 8) {
-    return 'Password must be at least 8 characters long.'
+    return 'Your password needs at least 8 characters.'
   }
 
   if (password.value !== confirmPassword.value) {
-    return 'Passwords do not match.'
+    return 'Those passwords do not match.'
   }
 
   return ''
@@ -155,7 +155,7 @@ const handleSignUp = async () => {
   successMessage.value = ''
 
   if (!username.value || !email.value || !password.value || !confirmPassword.value) {
-    errorMessage.value = 'Please complete all fields.'
+    errorMessage.value = 'Fill in all the fields first.'
     return
   }
 
@@ -189,24 +189,24 @@ const handleSignUp = async () => {
 
       if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
         isConfirmStep.value = true
-        successMessage.value = 'Verification code sent. Please check your email.'
+        successMessage.value = 'Code sent. Check your email and pop it in here.'
       } else {
-        successMessage.value = 'Account created successfully. Redirecting to login...'
+        successMessage.value = 'Account created. Sending you to login...'
         setTimeout(() => router.push('/login'), 1200)
       }
       return
     }
 
     isConfirmStep.value = true
-    successMessage.value = 'Local dev mode: account created. Use code 123456 to continue.'
+    successMessage.value = 'Local demo mode: account created. Use code 123456 to keep going.'
   } catch (err) {
     console.error('注册失败', err)
     if (err.name === 'UsernameExistsException') {
-      errorMessage.value = 'This email is already registered.'
+      errorMessage.value = 'That account already exists.'
     } else if (err.name === 'InvalidPasswordException') {
-      errorMessage.value = 'Password does not meet Cognito policy requirements.'
+      errorMessage.value = 'That password does not match the Cognito rules yet.'
     } else {
-      errorMessage.value = err.message || 'Sign up failed. Please try again.'
+      errorMessage.value = err.message || 'Sign up did not work this time. Try again.'
     }
   } finally {
     loading.value = false
@@ -218,7 +218,7 @@ const handleConfirmSignUp = async () => {
   successMessage.value = ''
 
   if (!confirmationCode.value) {
-    errorMessage.value = 'Please enter the verification code.'
+    errorMessage.value = 'Enter the verification code first.'
     return
   }
 
@@ -232,20 +232,20 @@ const handleConfirmSignUp = async () => {
       sessionStorage.removeItem('signupEmail')
       sessionStorage.removeItem('signupUsername')
     } else if (confirmationCode.value !== '123456') {
-      errorMessage.value = 'Local dev mode: use verification code 123456.'
+      errorMessage.value = 'Local demo mode: use verification code 123456.'
       return
     }
 
-    successMessage.value = 'Your account is confirmed. Redirecting to login...'
+    successMessage.value = 'You are verified. Heading to login...'
     setTimeout(() => router.push('/login'), 1200)
   } catch (err) {
     console.error('确认注册失败', err)
     if (err.name === 'CodeMismatchException') {
-      errorMessage.value = 'Incorrect verification code.'
+      errorMessage.value = 'That code does not look right.'
     } else if (err.name === 'ExpiredCodeException') {
-      errorMessage.value = 'Verification code expired. Please sign up again.'
+      errorMessage.value = 'That code expired. Sign up again and grab a fresh one.'
     } else {
-      errorMessage.value = err.message || 'Confirmation failed. Please try again.'
+      errorMessage.value = err.message || 'Verification failed. Please try again.'
     }
   } finally {
     loading.value = false

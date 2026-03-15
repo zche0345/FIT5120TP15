@@ -9,7 +9,8 @@
 
     <section class="form-panel">
       <div class="login-card">
-        <h2>Welcome to HelioSafe!</h2>
+        <h2>Welcome back</h2>
+        <p class="helper-text">Log in, check the UV, and keep your skin one step ahead.</p>
 
         <form class="login-form" @submit.prevent="handleLogin">
           <input
@@ -31,23 +32,23 @@
           <div class="options-row">
             <label class="remember-me">
               <input v-model="remember" type="checkbox" />
-              <span>Remember me</span>
+              <span>Keep me signed in</span>
             </label>
 
             <router-link to="/forgot-password" class="forgot-link">
-              Forgot Password?
+              Forgot password?
             </router-link>
           </div>
 
           <button type="submit" class="login-btn" :disabled="loading">
-            {{ loading ? 'Logging in...' : 'Login' }}
+            {{ loading ? 'Logging you in...' : 'Log In' }}
           </button>
         </form>
         <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
         <div class="auth-footer">
-          <span>Don't have an account?</span>
-          <router-link to="/signup" class="signup-link">Sign Up</router-link>
+          <span>New here?</span>
+          <router-link to="/signup" class="signup-link">Create an account</router-link>
         </div>
       </div>
     </section>
@@ -55,9 +56,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { signIn } from '@aws-amplify/auth'
+import { getCurrentUser, signIn } from '@aws-amplify/auth'
 
 const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
 
@@ -69,10 +70,21 @@ const remember = ref(false)
 const errorMessage = ref('')
 const loading = ref(false)
 
+onMounted(async () => {
+  if (!useCognito) return
+
+  try {
+    await getCurrentUser()
+    router.push('/home')
+  } catch {
+    // No active Cognito session, keep user on the login page.
+  }
+})
+
 const handleLogin = async () => {
   errorMessage.value = ''
   if (!email.value || !password.value) {
-    errorMessage.value = '请输入邮箱和密码。'
+    errorMessage.value = 'Pop in your email and password first.'
     return
   }
 
@@ -93,17 +105,19 @@ const handleLogin = async () => {
       return
     }
 
-    errorMessage.value = '本地测试模式：请使用 test@demo.com / Test1234，或设置 VITE_USE_COGNITO=true 来启用 Cognito。'
+    errorMessage.value = 'Local demo mode: use test@demo.com / Test1234, or turn on Cognito with VITE_USE_COGNITO=true.'
   } catch (err) {
     console.error('登录失败', err)
-    if (err.name === 'UserNotConfirmedException') {
-      errorMessage.value = '账号未激活，请检查邮箱确认链接。'
+    if (err.name === 'UserAlreadyAuthenticatedException') {
+      router.push('/home')
+    } else if (err.name === 'UserNotConfirmedException') {
+      errorMessage.value = 'Your account is not confirmed yet. Check your email for the verification link or code.'
     } else if (err.name === 'NotAuthorizedException') {
-      errorMessage.value = '密码错误，请重试。'
+      errorMessage.value = 'That password does not look right. Try again.'
     } else if (err.name === 'UserNotFoundException') {
-      errorMessage.value = '用户不存在，请先注册。'
+      errorMessage.value = 'No account found for that email yet. Try signing up first.'
     } else {
-      errorMessage.value = err.message || err || '登录失败，请稍后再试。'
+      errorMessage.value = err.message || err || 'Login did not work this time. Give it another go.'
     }
   } finally {
     loading.value = false
@@ -186,6 +200,12 @@ const handleLogin = async () => {
   font-size: clamp(2rem, 2.2vw, 3rem);
   font-weight: 600;
   color: #3c3c3c;
+}
+
+.helper-text {
+  margin: -0.5rem 0 1.2rem;
+  font-size: 1.08rem;
+  color: #444;
 }
 
 .login-form {

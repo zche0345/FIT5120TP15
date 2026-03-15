@@ -2,7 +2,9 @@
   <div class="home-page" :style="pageBackground">
     <header class="top-bar">
       <h1 class="logo">HelioSafe</h1>
-      <button class="menu-btn">Menu</button>
+      <div class="top-actions">
+        <button class="menu-btn signout-btn" @click="handleSignOut">Sign Out</button>
+      </div>
     </header>
 
     <main class="main-content">
@@ -25,6 +27,7 @@
 
       <section class="info-panel">
         <p class="uv-message">{{ uvMessage }}</p>
+        <p v-if="apiError" class="api-error">{{ apiError }}</p>
 
         <section class="forecast-card">
           <div class="forecast-header">
@@ -92,6 +95,8 @@
         </section>
 
         <div class="controls">
+          <p class="input-hint">Want to see how different UV levels change things?</p>
+
           <input
             v-model.number="uvIndex"
             type="number"
@@ -105,9 +110,22 @@
             Check UV at my location
           </button>
 
-          <button class="action-btn secondary-btn">
+          <router-link
+            :to="{
+              path: '/clothing-guide',
+              query: {
+                uv: String(uvIndex),
+                location,
+              },
+            }"
+            class="action-btn secondary-btn guide-link"
+          >
             Clothing Guide
-          </button>
+          </router-link>
+
+          <router-link to="/awareness" class="action-btn awareness-btn">
+            Explore UV Impact
+          </router-link>
         </div>
       </section>
     </main>
@@ -115,11 +133,22 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { signOut } from '@aws-amplify/auth'
+
+const MELBOURNE_COORDS = {
+  latitude: -37.8136,
+  longitude: 144.9631,
+  name: 'Melbourne',
+}
+const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
+const router = useRouter()
 
 const uvIndex = ref(2)
-const location = ref('Location not detected')
+const location = ref(MELBOURNE_COORDS.name)
 const temperature = ref(16)
+const apiError = ref('')
 
 const weeklyForecast = ref([
   { day: 'Mon', value: 3 },
@@ -140,6 +169,52 @@ watch(uvIndex, (value) => {
   if (Number(value) < 0) uvIndex.value = 0
 })
 
+const fetchUvData = async ({ latitude, longitude, name }) => {
+  apiError.value = ''
+  location.value = name
+
+  try {
+    const params = new URLSearchParams({
+      latitude: String(latitude),
+      longitude: String(longitude),
+      current: 'temperature_2m,uv_index',
+      daily: 'uv_index_max',
+      timezone: 'Australia/Melbourne',
+      forecast_days: '7',
+    })
+
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
+
+    if (!response.ok) {
+      throw new Error('Unable to fetch UV data right now.')
+    }
+
+    const data = await response.json()
+    const currentUv = Number(data.current?.uv_index)
+    const currentTemperature = Number(data.current?.temperature_2m)
+    const dailyTimes = data.daily?.time ?? []
+    const dailyUv = data.daily?.uv_index_max ?? []
+
+    if (!Number.isNaN(currentUv)) {
+      uvIndex.value = Math.round(currentUv)
+    }
+
+    if (!Number.isNaN(currentTemperature)) {
+      temperature.value = Math.round(currentTemperature)
+    }
+
+    if (dailyTimes.length && dailyUv.length) {
+      weeklyForecast.value = dailyTimes.map((date, index) => ({
+        day: new Date(date).toLocaleDateString('en-AU', { weekday: 'short' }),
+        value: Math.round(Number(dailyUv[index]) || 0),
+      }))
+    }
+  } catch (error) {
+    console.error('Failed to fetch UV data', error)
+    apiError.value = 'Unable to load live UV data. Showing the current default view.'
+  }
+}
+
 const getLocation = () => {
   if (!navigator.geolocation) {
     location.value = 'Location not supported'
@@ -149,15 +224,33 @@ const getLocation = () => {
   location.value = 'Detecting location...'
 
   navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const lat = position.coords.latitude.toFixed(2)
-      const lon = position.coords.longitude.toFixed(2)
-      location.value = `Lat ${lat}, Lon ${lon}`
+    async (position) => {
+      await fetchUvData({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        name: 'Current location',
+      })
     },
     () => {
       location.value = 'Location permission denied'
     }
   )
+}
+
+onMounted(() => {
+  fetchUvData(MELBOURNE_COORDS)
+})
+
+const handleSignOut = async () => {
+  try {
+    if (useCognito) {
+      await signOut()
+    }
+  } catch (error) {
+    console.error('Failed to sign out cleanly', error)
+  } finally {
+    router.push('/login')
+  }
 }
 
 const uvData = computed(() => {
@@ -167,37 +260,66 @@ const uvData = computed(() => {
     return {
       category: 'Low',
       color: '#A8CF16',
-      message: 'Low UV today. Minimal risk, but daily protection is still a good habit.',
+      message: 'UV is pretty chill right now. You are likely fine for the moment, but SPF is still a good call.',
     }
   } else if (uv <= 5) {
     return {
       category: 'Moderate',
       color: '#FFBC01',
-      message: 'Moderate UV today. Consider sunscreen, sunglasses, and some shade during peak hours.',
+      message: 'The sun is starting to mean business. A little sunscreen now will save you later.',
     }
   } else if (uv <= 7) {
     return {
       category: 'High',
       color: '#FE7200',
-      message: 'High UV today. Sun protection is important before spending time outdoors.',
+      message: 'UV is high, so your skin is definitely on the clock. Shade, SPF, and sunnies are your best friends.',
     }
   } else if (uv <= 10) {
     return {
       category: 'Very High',
       color: '#C43108',
-      message: 'Very high UV today. Limit exposure, wear sunscreen, and cover up where possible.',
+      message: 'This is strong sun territory. Staying out too long without protection is a fast track to a burn.',
     }
   } else {
     return {
       category: 'Extreme',
       color: '#8C1CC7',
-      message: 'Extreme UV today. Avoid direct sun where possible and use full protection outdoors.',
+      message: 'UV is absolutely intense right now. If you are heading out, go full protection mode.',
     }
   }
 })
 
 const uvCategory = computed(() => uvData.value.category)
-const uvMessage = computed(() => uvData.value.message)
+const estimateDamageMinutes = (uv) => {
+  if (uv <= 2) return null
+  if (uv <= 5) return 45
+  if (uv <= 7) return 25
+  if (uv <= 10) return 15
+  return 10
+}
+
+const uvMessage = computed(() => {
+  const uv = Number(uvIndex.value)
+  const minutes = estimateDamageMinutes(uv)
+
+  if (!minutes) {
+    return 'UV is low right now. You are not in instant-burn mode, but daily SPF is still the smart move.'
+  }
+
+  if (uv <= 5) {
+    return `UV is climbing. Your skin could start taking damage in about ${minutes} minutes, so throw on sunscreen before you settle in outside.`
+  }
+
+  if (uv <= 7) {
+    return `Your skin could start taking damage in around ${minutes} minutes. SPF up, grab your sunnies, and look for shade soon.`
+  }
+
+  if (uv <= 10) {
+    return `Your skin could start taking damage in about ${minutes} minutes. Find shade now and do not let the sun cook you.`
+  }
+
+  return `Your skin could start taking damage in as little as ${minutes} minutes. This is your cue to avoid direct sun and go full SPF mode.`
+})
 
 const pageBackground = computed(() => ({
   background: `linear-gradient(
@@ -283,6 +405,11 @@ const areaPoints = computed(() => {
   margin-bottom: 1rem;
 }
 
+.top-actions {
+  display: flex;
+  gap: 0.7rem;
+}
+
 .logo {
   margin: 0;
   font-family: 'Cormorant Garamond', serif;
@@ -308,6 +435,19 @@ const areaPoints = computed(() => {
   backdrop-filter: blur(12px);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.nav-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.signout-btn {
+  background: rgba(9, 0, 94, 0.86);
+  color: white;
+  border-color: rgba(9, 0, 94, 0.14);
 }
 
 .menu-btn:hover {
@@ -419,6 +559,13 @@ const areaPoints = computed(() => {
   color: #0f172a;
 }
 
+.api-error {
+  margin: -0.2rem 0 0.8rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #b42318;
+}
+
 .forecast-card {
   max-width: 760px;
   border-radius: 1.55rem;
@@ -521,6 +668,13 @@ const areaPoints = computed(() => {
   gap: 0.65rem;
 }
 
+.input-hint {
+  margin: 0 0 0.05rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #475569;
+}
+
 .uv-input {
   width: 100%;
   height: 48px;
@@ -576,6 +730,22 @@ const areaPoints = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.42);
 }
 
+.guide-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.awareness-btn {
+  background: rgba(9, 0, 94, 0.88);
+  color: white;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 1100px) {
   .home-page {
     padding: 1rem 1.1rem 1.1rem;
@@ -623,6 +793,10 @@ const areaPoints = computed(() => {
     min-width: 92px;
     height: 38px;
     font-size: 0.9rem;
+  }
+
+  .top-actions {
+    gap: 0.45rem;
   }
 
   .uv-card {
