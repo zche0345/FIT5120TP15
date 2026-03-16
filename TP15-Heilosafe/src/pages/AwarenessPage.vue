@@ -11,9 +11,10 @@
     <main class="main-content">
       <section class="intro-card glass-card">
         <p class="eyebrow">UV Awareness</p>
-        <h2>See the impact. Take UV seriously.</h2>
+        <h2>The sun is not always harmless. Your skin knows.</h2>
         <p class="intro-copy">
-          Real melanoma data, shown in a way that is quick to get and hard to ignore.
+          Real melanoma data, made easier to understand so the risk feels real, not just like
+          another number on a screen.
         </p>
 
         <div class="tab-row">
@@ -70,7 +71,8 @@
           </div>
 
           <p class="chart-explainer">
-            Melanoma risk is not the same everywhere. UV exposure builds up over time.
+            UV exposure does not hit the same everywhere. The damage builds over time, which is
+            why protecting your skin is an everyday thing, not just a summer thing.
           </p>
         </section>
 
@@ -101,29 +103,13 @@
           </div>
 
           <p class="chart-explainer">
-            UV damage builds over time. Small habits now can matter later.
+            Skin damage is sneaky. It builds up bit by bit, so the habits you have now actually
+            matter way more than you think.
           </p>
         </section>
       </section>
 
-      <section class="glass-card insight-card">
-        <div class="insight">
-          <p class="section-label">Skin Myth</p>
-          <h3>Myth: Cool weather means low UV.</h3>
-          <p>
-            Fact: UV can still be strong on cool or cloudy days. The temperature can feel fine
-            while your skin is still taking damage.
-          </p>
-        </div>
-
-        <div class="insight-stat">
-          <span class="stat-value">3</span>
-          <span class="stat-copy">shareable takeaways for your group chat</span>
-          <p class="share-line">UV damage builds up, even on mild days.</p>
-          <p class="share-line">Daily SPF matters more than people think.</p>
-          <p class="share-line">Sun safety is easier when your friends do it too.</p>
-        </div>
-      </section>
+      
     </main>
   </div>
 </template>
@@ -141,7 +127,6 @@ const loading = ref(true)
 const apiError = ref('')
 
 const skinCancerImpact = ref([])
-
 const ageImpact = ref([])
 
 const maxImpactValue = computed(() => Math.max(...skinCancerImpact.value.map((item) => item.value), 1))
@@ -192,7 +177,7 @@ const fetchAwarenessData = async () => {
     ageImpact.value = ageData.items ?? []
   } catch (error) {
     console.error('Failed to load awareness data', error)
-    apiError.value = 'Awareness data could not be loaded right now. Try again in a moment.'
+    apiError.value = 'Awareness data could not be loaded right now. Please try again in a bit.'
   } finally {
     loading.value = false
   }
