@@ -16,7 +16,8 @@
         <p class="uv-label">{{ uvCategory }} UV Index</p>
         <h2 class="uv-number">{{ uvIndex }}</h2>
 
-        <p class="location">{{ location }}</p>
+        <p class="location">{{ suburb || location }}</p>
+        <p v-if="suburb" class="suburb-label">{{ location }}</p>
         <p class="temp">{{ temperature }}°C</p>
 
         <div class="uv-chip">
@@ -25,17 +26,60 @@
         </div>
       </section>
 
-      <section class="info-panel">
-        <p class="uv-message">{{ uvMessage }}</p>
-        <p v-if="apiError" class="api-error">{{ apiError }}</p>
+      <section class="content-grid">
+        <section class="hero-card">
+          <div class="hero-copy">
+            <p class="hero-label">Live UV Update</p>
+            <h2 class="hero-title">Your skin has entered the chat.</h2>
+            <p class="uv-message">{{ uvMessage }}</p>
+            <p v-if="apiError" class="api-error">{{ apiError }}</p>
+          </div>
+
+          <div class="controls-card">
+            <p class="input-hint">Want to test a different UV level?</p>
+
+            <input
+              v-model.number="uvIndex"
+              type="number"
+              min="0"
+              max="20"
+              placeholder="Enter UV Index"
+              class="uv-input"
+            />
+
+            <div class="button-grid">
+              <button class="action-btn primary-btn" @click="getLocation">
+                Check UV at My Location
+              </button>
+
+              <router-link
+                :to="{
+                  path: '/clothing-guide',
+                  query: {
+                    uv: String(uvIndex),
+                    location: suburb || location,
+                  },
+                }"
+                class="action-btn secondary-btn guide-link"
+              >
+                Clothing Guide
+              </router-link>
+
+              <router-link to="/awareness" class="action-btn awareness-btn">
+                Explore UV Impact
+              </router-link>
+            </div>
+          </div>
+        </section>
 
         <section class="forecast-card">
           <div class="forecast-header">
             <div>
+              <p class="section-label">Forecast</p>
               <h3>Weekly UV Trend</h3>
-              <p>Predicted UV levels for the next 7 days</p>
+              <p>Your next 7 days, sun-wise</p>
             </div>
-            <div class="mini-badge">Forecast</div>
+            <div class="mini-badge">7 Days</div>
           </div>
 
           <div class="trend-chart">
@@ -94,39 +138,39 @@
           </div>
         </section>
 
-        <div class="controls">
-          <p class="input-hint">Want to see how different UV levels change things?</p>
+        <section class="myth-card">
+          <div class="myth-header">
+            <div>
+              <p class="section-label">UV Myth Check</p>
+              <h3>Things people get wrong about the sun</h3>
+            </div>
+            <div class="mini-badge">Myths</div>
+          </div>
 
-          <input
-            v-model.number="uvIndex"
-            type="number"
-            min="0"
-            max="20"
-            placeholder="Enter UV Index"
-            class="uv-input"
-          />
+          <div class="myth-list">
+            <div class="myth-item">
+              <h4>If it is not hot, the UV is probably low.</h4>
+              <p>
+                Nope. UV can still be high even when the weather feels cool, cloudy, or breezy.
+              </p>
+            </div>
 
-          <button class="action-btn primary-btn" @click="getLocation">
-            Check UV at my location
-          </button>
+            <div class="myth-item">
+              <h4>Sunscreen is just for beach days.</h4>
+              <p>
+                Not really. Walking to class, sitting outside, or just being out and about still
+                adds up.
+              </p>
+            </div>
 
-          <router-link
-            :to="{
-              path: '/clothing-guide',
-              query: {
-                uv: String(uvIndex),
-                location,
-              },
-            }"
-            class="action-btn secondary-btn guide-link"
-          >
-            Clothing Guide
-          </router-link>
-
-          <router-link to="/awareness" class="action-btn awareness-btn">
-            Explore UV Impact
-          </router-link>
-        </div>
+            <div class="myth-item">
+              <h4>One little sunburn is not that serious.</h4>
+              <p>
+                Sun damage builds over time, so protecting your skin now really does matter later.
+              </p>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   </div>
@@ -142,11 +186,13 @@ const MELBOURNE_COORDS = {
   longitude: 144.9631,
   name: 'Melbourne',
 }
+
 const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
 const router = useRouter()
 
 const uvIndex = ref(2)
 const location = ref(MELBOURNE_COORDS.name)
+const suburb = ref('')
 const temperature = ref(16)
 const apiError = ref('')
 
@@ -167,13 +213,58 @@ watch(uvIndex, (value) => {
   }
 
   if (Number(value) < 0) uvIndex.value = 0
+  if (Number(value) > 20) uvIndex.value = 20
 })
+
+const getReadableLocation = async (latitude, longitude, fallbackName = 'Current location') => {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error('Reverse geocoding failed')
+    }
+
+    const data = await response.json()
+    const address = data.address || {}
+
+    const detectedSuburb =
+      address.suburb ||
+      address.neighbourhood ||
+      address.city_district ||
+      address.borough ||
+      ''
+
+    const detectedCity =
+      address.city ||
+      address.town ||
+      address.municipality ||
+      address.county ||
+      fallbackName
+
+    suburb.value = detectedSuburb
+    location.value = detectedCity
+  } catch (error) {
+    console.error('Failed to reverse geocode location', error)
+    suburb.value = ''
+    location.value = fallbackName
+  }
+}
 
 const fetchUvData = async ({ latitude, longitude, name }) => {
   apiError.value = ''
   location.value = name
+  suburb.value = ''
 
   try {
+    await getReadableLocation(latitude, longitude, name)
+
     const params = new URLSearchParams({
       latitude: String(latitude),
       longitude: String(longitude),
@@ -211,17 +302,19 @@ const fetchUvData = async ({ latitude, longitude, name }) => {
     }
   } catch (error) {
     console.error('Failed to fetch UV data', error)
-    apiError.value = 'Unable to load live UV data. Showing the current default view.'
+    apiError.value = 'Could not load live UV data right now, so we are showing the default view.'
   }
 }
 
 const getLocation = () => {
   if (!navigator.geolocation) {
     location.value = 'Location not supported'
+    suburb.value = ''
     return
   }
 
   location.value = 'Detecting location...'
+  suburb.value = ''
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
@@ -233,6 +326,12 @@ const getLocation = () => {
     },
     () => {
       location.value = 'Location permission denied'
+      suburb.value = ''
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000,
     }
   )
 }
@@ -260,36 +359,42 @@ const uvData = computed(() => {
     return {
       category: 'Low',
       color: '#A8CF16',
-      message: 'UV is pretty chill right now. You are likely fine for the moment, but SPF is still a good call.',
+      message:
+        'Pretty chill right now. Risk is lower, but SPF is still a smart move.',
     }
   } else if (uv <= 5) {
     return {
       category: 'Moderate',
       color: '#FFBC01',
-      message: 'The sun is starting to mean business. A little sunscreen now will save you later.',
+      message:
+        'The sun is picking up. A little protection now will save you later.',
     }
   } else if (uv <= 7) {
     return {
       category: 'High',
       color: '#FE7200',
-      message: 'UV is high, so your skin is definitely on the clock. Shade, SPF, and sunnies are your best friends.',
+      message:
+        'UV is high, so your skin is definitely clocking in. SPF, sunnies, and shade would be a good idea.',
     }
   } else if (uv <= 10) {
     return {
       category: 'Very High',
       color: '#C43108',
-      message: 'This is strong sun territory. Staying out too long without protection is a fast track to a burn.',
+      message:
+        'This is strong sun territory. Staying out too long without protection is asking for trouble.',
     }
   } else {
     return {
       category: 'Extreme',
       color: '#8C1CC7',
-      message: 'UV is absolutely intense right now. If you are heading out, go full protection mode.',
+      message:
+        'UV is intense right now. If you are heading out, this is full-protection mode.',
     }
   }
 })
 
 const uvCategory = computed(() => uvData.value.category)
+
 const estimateDamageMinutes = (uv) => {
   if (uv <= 2) return null
   if (uv <= 5) return 45
@@ -303,22 +408,22 @@ const uvMessage = computed(() => {
   const minutes = estimateDamageMinutes(uv)
 
   if (!minutes) {
-    return 'UV is low right now. You are not in instant-burn mode, but daily SPF is still the smart move.'
+    return 'UV is low right now. You are not exactly in instant-burn mode, but daily SPF is still the smart move.'
   }
 
   if (uv <= 5) {
-    return `UV is climbing. Your skin could start taking damage in about ${minutes} minutes, so throw on sunscreen before you settle in outside.`
+    return `UV is climbing. Your skin could start taking damage in about ${minutes} minutes, so maybe do not leave the sunscreen for later.`
   }
 
   if (uv <= 7) {
-    return `Your skin could start taking damage in around ${minutes} minutes. SPF up, grab your sunnies, and look for shade soon.`
+    return `Your skin could start taking damage in around ${minutes} minutes. SPF up, grab your sunnies, and try not to roast out there.`
   }
 
   if (uv <= 10) {
-    return `Your skin could start taking damage in about ${minutes} minutes. Find shade now and do not let the sun cook you.`
+    return `Your skin could start taking damage in about ${minutes} minutes. Shade would be a really good idea right now.`
   }
 
-  return `Your skin could start taking damage in as little as ${minutes} minutes. This is your cue to avoid direct sun and go full SPF mode.`
+  return `Your skin could start taking damage in as little as ${minutes} minutes. This is your sign to avoid direct sun and go full protection mode.`
 })
 
 const pageBackground = computed(() => ({
@@ -349,7 +454,11 @@ const chartPoints = computed(() => {
   const usableHeight = height - paddingY * 2
 
   return weeklyForecast.value.map((item, index) => {
-    const x = paddingX + (index * usableWidth) / (weeklyForecast.value.length - 1)
+    const x =
+      weeklyForecast.value.length > 1
+        ? paddingX + (index * usableWidth) / (weeklyForecast.value.length - 1)
+        : width / 2
+
     const y = height - paddingY - (item.value / maxValue) * usableHeight
     return { x, y }
   })
@@ -392,7 +501,7 @@ const areaPoints = computed(() => {
 .home-page {
   min-height: 100vh;
   width: 100%;
-  padding: 1.1rem 1.6rem 1.25rem;
+  padding: 1.2rem 1.5rem 1.4rem;
   font-family: 'Inter', sans-serif;
   transition: background 0.35s ease;
   overflow-x: hidden;
@@ -402,7 +511,7 @@ const areaPoints = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 1.2rem;
 }
 
 .top-actions {
@@ -426,7 +535,7 @@ const areaPoints = computed(() => {
   height: 42px;
   border: 1px solid rgba(9, 0, 94, 0.18);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.7);
   color: #1e1b4b;
   font-family: 'Inter', sans-serif;
   font-size: 0.96rem;
@@ -437,15 +546,8 @@ const areaPoints = computed(() => {
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.nav-link-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-}
-
 .signout-btn {
-  background: rgba(9, 0, 94, 0.86);
+  background: rgba(9, 0, 94, 0.88);
   color: white;
   border-color: rgba(9, 0, 94, 0.14);
 }
@@ -457,14 +559,22 @@ const areaPoints = computed(() => {
 
 .main-content {
   display: grid;
-  grid-template-columns: minmax(280px, 410px) minmax(0, 1fr);
+  grid-template-columns: minmax(290px, 390px) minmax(0, 1fr);
   gap: 1.2rem;
   align-items: start;
 }
 
+.content-grid {
+  display: grid;
+  gap: 1rem;
+}
+
 .uv-card,
-.forecast-card {
-  background: rgba(255, 255, 255, 0.26);
+.hero-card,
+.forecast-card,
+.myth-card,
+.controls-card {
+  background: rgba(255, 255, 255, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.42);
   backdrop-filter: blur(16px);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
@@ -472,34 +582,36 @@ const areaPoints = computed(() => {
 
 .uv-card {
   border-radius: 1.8rem;
-  min-height: 450px;
-  padding: 1.45rem 1.2rem;
+  min-height: 520px;
+  padding: 1.6rem 1.25rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  position: sticky;
+  top: 1.2rem;
 }
 
 .sun-icon-wrap {
-  width: 74px;
-  height: 74px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.38);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  margin-bottom: 0.45rem;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  margin-bottom: 0.55rem;
 }
 
 .sun-icon {
-  font-size: 2.8rem;
+  font-size: 3rem;
   line-height: 1;
 }
 
 .uv-label {
-  margin: 0.45rem 0 0.15rem;
+  margin: 0.5rem 0 0.18rem;
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(1.5rem, 2.1vw, 2.1rem);
+  font-size: clamp(1.55rem, 2.2vw, 2.2rem);
   font-weight: 600;
   color: #111827;
 }
@@ -507,35 +619,42 @@ const areaPoints = computed(() => {
 .uv-number {
   margin: 0;
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(3.8rem, 7vw, 6.1rem);
-  line-height: 0.95;
+  font-size: clamp(4.2rem, 7vw, 6.4rem);
+  line-height: 0.92;
   font-weight: 700;
   color: #02022a;
 }
 
 .location {
-  margin: 0.95rem 0 0.25rem;
+  margin: 1rem 0 0.2rem;
   font-size: clamp(1.05rem, 1.6vw, 1.35rem);
   font-weight: 600;
   color: #111827;
 }
 
+.suburb-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.94rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
 .temp {
   margin: 0;
-  font-size: clamp(1rem, 1.4vw, 1.25rem);
+  font-size: clamp(1rem, 1.4vw, 1.2rem);
   color: #334155;
 }
 
 .uv-chip {
-  margin-top: 1rem;
+  margin-top: 1.2rem;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 0.9rem;
+  padding: 0.62rem 0.95rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.54);
+  background: rgba(255, 255, 255, 0.56);
   color: #111827;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
@@ -546,58 +665,176 @@ const areaPoints = computed(() => {
   border-radius: 50%;
 }
 
-.info-panel {
-  padding-top: 0.1rem;
+.hero-card {
+  border-radius: 1.6rem;
+  padding: 1.2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 360px);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.hero-label,
+.section-label {
+  margin: 0 0 0.18rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.hero-title {
+  margin: 0 0 0.55rem;
+  font-size: clamp(1.55rem, 2.2vw, 2.3rem);
+  line-height: 1.05;
+  color: #111827;
 }
 
 .uv-message {
-  max-width: 700px;
-  margin: 0 0 0.8rem;
-  font-size: clamp(1.12rem, 1.65vw, 1.55rem);
-  line-height: 1.35;
+  margin: 0;
+  font-size: clamp(1.05rem, 1.45vw, 1.32rem);
+  line-height: 1.45;
   font-weight: 500;
   color: #0f172a;
+  max-width: 680px;
 }
 
 .api-error {
-  margin: -0.2rem 0 0.8rem;
-  font-size: 0.95rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.94rem;
   font-weight: 600;
   color: #b42318;
 }
 
-.forecast-card {
-  max-width: 760px;
-  border-radius: 1.55rem;
-  padding: 0.95rem 1.05rem 0.9rem;
-  margin-bottom: 0.8rem;
+.controls-card {
+  border-radius: 1.35rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.forecast-header {
+.input-hint {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.uv-input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  border-radius: 0.95rem;
+  padding: 0 0.95rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.98rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.84);
+  color: #0f172a;
+  outline: none;
+  margin-bottom: 0.8rem;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.uv-input::placeholder {
+  color: #64748b;
+}
+
+.uv-input:focus {
+  border-color: rgba(31, 29, 240, 0.4);
+  box-shadow: 0 0 0 4px rgba(31, 29, 240, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.button-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.action-btn {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 999px;
+  border: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.96rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #1d4ed8, #4338ca);
+  color: white;
+}
+
+.secondary-btn {
+  background: rgba(255, 255, 255, 0.82);
+  color: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+}
+
+.awareness-btn {
+  background: rgba(9, 0, 94, 0.88);
+  color: white;
+}
+
+.guide-link,
+.awareness-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forecast-card {
+  border-radius: 1.55rem;
+  padding: 1.05rem 1.1rem 1rem;
+}
+
+.forecast-header,
+.myth-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.85rem;
 }
 
-.forecast-header h3 {
+.forecast-header h3,
+.myth-header h3 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.18rem;
   font-weight: 700;
   color: #111827;
 }
 
 .forecast-header p {
-  margin: 0.2rem 0 0;
+  margin: 0.22rem 0 0;
   font-size: 0.88rem;
-  color: #475569;
+  color: #64748b;
 }
 
 .mini-badge {
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.78rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.62);
   color: #1e1b4b;
   font-size: 0.76rem;
   font-weight: 700;
@@ -606,7 +843,7 @@ const areaPoints = computed(() => {
 
 .trend-chart {
   display: flex;
-  gap: 0.7rem;
+  gap: 0.75rem;
   align-items: stretch;
 }
 
@@ -615,7 +852,7 @@ const areaPoints = computed(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 0.15rem 0 1.55rem;
+  padding: 0.12rem 0 1.55rem;
   font-size: 0.72rem;
   font-weight: 600;
   color: #64748b;
@@ -628,9 +865,9 @@ const areaPoints = computed(() => {
 
 .line-svg {
   width: 100%;
-  height: 195px;
+  height: 200px;
   display: block;
-  border-radius: 0.95rem;
+  border-radius: 1rem;
   background:
     linear-gradient(to top, rgba(148, 163, 184, 0.16) 1px, transparent 1px);
   background-size: 100% 25%;
@@ -640,7 +877,7 @@ const areaPoints = computed(() => {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 0.15rem;
-  margin-top: 0.35rem;
+  margin-top: 0.42rem;
 }
 
 .x-label-item {
@@ -661,107 +898,56 @@ const areaPoints = computed(() => {
   color: #64748b;
 }
 
-.controls {
-  max-width: 760px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+.myth-card {
+  border-radius: 1.55rem;
+  padding: 1.05rem 1.1rem;
 }
 
-.input-hint {
-  margin: 0 0 0.05rem;
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: #475569;
+.myth-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
 }
 
-.uv-input {
-  width: 100%;
-  height: 48px;
-  border: 1px solid rgba(100, 116, 139, 0.2);
-  border-radius: 0.95rem;
-  padding: 0 0.95rem;
-  font-family: 'Inter', sans-serif;
-  font-size: 0.98rem;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.82);
-  color: #0f172a;
-  outline: none;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+.myth-item {
+  padding: 1rem;
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  min-height: 100%;
 }
 
-.uv-input::placeholder {
-  color: #64748b;
-}
-
-.uv-input:focus {
-  border-color: rgba(31, 29, 240, 0.4);
-  box-shadow: 0 0 0 4px rgba(31, 29, 240, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.action-btn {
-  width: 100%;
-  min-height: 50px;
-  border-radius: 999px;
-  border: none;
-  font-family: 'Inter', sans-serif;
+.myth-item h4 {
+  margin: 0 0 0.42rem;
   font-size: 0.98rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
-}
-
-.action-btn:hover {
-  transform: translateY(-1px);
-}
-
-.primary-btn {
-  background: linear-gradient(135deg, #1d4ed8, #4338ca);
-  color: white;
-}
-
-.secondary-btn {
-  background: rgba(255, 255, 255, 0.78);
+  line-height: 1.35;
   color: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.42);
 }
 
-.guide-link {
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.myth-item p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #334155;
 }
 
-.awareness-btn {
-  background: rgba(9, 0, 94, 0.88);
-  color: white;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-@media (max-width: 1100px) {
-  .home-page {
-    padding: 1rem 1.1rem 1.1rem;
-  }
-
-  .main-content {
-    grid-template-columns: 340px 1fr;
-    gap: 1rem;
+@media (max-width: 1180px) {
+  .hero-card {
+    grid-template-columns: 1fr;
   }
 
   .uv-card {
-    min-height: 420px;
+    position: static;
+    min-height: 470px;
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
+  .home-page {
+    padding: 1rem;
+  }
+
   .main-content {
     grid-template-columns: 1fr;
   }
@@ -770,9 +956,8 @@ const areaPoints = computed(() => {
     min-height: auto;
   }
 
-  .forecast-card,
-  .controls {
-    max-width: 100%;
+  .myth-list {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -782,7 +967,7 @@ const areaPoints = computed(() => {
   }
 
   .top-bar {
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.9rem;
   }
 
   .logo {
@@ -799,31 +984,40 @@ const areaPoints = computed(() => {
     gap: 0.45rem;
   }
 
+  .uv-card,
+  .hero-card,
+  .forecast-card,
+  .myth-card,
+  .controls-card {
+    border-radius: 1.3rem;
+  }
+
   .uv-card {
-    border-radius: 1.4rem;
-    padding: 1.2rem 1rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .hero-card,
+  .forecast-card,
+  .myth-card {
+    padding: 0.9rem;
   }
 
   .sun-icon-wrap {
-    width: 62px;
-    height: 62px;
+    width: 64px;
+    height: 64px;
   }
 
   .sun-icon {
-    font-size: 2.35rem;
+    font-size: 2.4rem;
   }
 
-  .forecast-card {
-    border-radius: 1.3rem;
-    padding: 0.85rem;
+  .hero-title {
+    font-size: 1.5rem;
   }
 
-  .forecast-header {
-    align-items: flex-start;
-  }
-
-  .forecast-header h3 {
-    font-size: 1.05rem;
+  .forecast-header h3,
+  .myth-header h3 {
+    font-size: 1.02rem;
   }
 
   .forecast-header p {
@@ -831,7 +1025,7 @@ const areaPoints = computed(() => {
   }
 
   .line-svg {
-    height: 165px;
+    height: 170px;
   }
 
   .day-name,
@@ -846,8 +1040,8 @@ const areaPoints = computed(() => {
   }
 
   .action-btn {
-    min-height: 48px;
-    font-size: 0.94rem;
+    min-height: 46px;
+    font-size: 0.93rem;
   }
 }
 </style>
