@@ -16,7 +16,8 @@
         <p class="uv-label">{{ uvCategory }} UV Index</p>
         <h2 class="uv-number">{{ uvIndex }}</h2>
 
-        <p class="location">{{ location }}</p>
+        <p class="location">{{ suburb || location }}</p>
+        <p v-if="suburb" class="suburb-label">{{ location }}</p>
         <p class="temp">{{ temperature }}°C</p>
 
         <div class="uv-chip">
@@ -115,7 +116,7 @@
               path: '/clothing-guide',
               query: {
                 uv: String(uvIndex),
-                location,
+                location: suburb || location,
               },
             }"
             class="action-btn secondary-btn guide-link"
@@ -142,11 +143,13 @@ const MELBOURNE_COORDS = {
   longitude: 144.9631,
   name: 'Melbourne',
 }
+
 const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
 const router = useRouter()
 
 const uvIndex = ref(2)
 const location = ref(MELBOURNE_COORDS.name)
+const suburb = ref('')
 const temperature = ref(16)
 const apiError = ref('')
 
@@ -167,13 +170,58 @@ watch(uvIndex, (value) => {
   }
 
   if (Number(value) < 0) uvIndex.value = 0
+  if (Number(value) > 20) uvIndex.value = 20
 })
+
+const getReadableLocation = async (latitude, longitude, fallbackName = 'Current location') => {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error('Reverse geocoding failed')
+    }
+
+    const data = await response.json()
+    const address = data.address || {}
+
+    const detectedSuburb =
+      address.suburb ||
+      address.neighbourhood ||
+      address.city_district ||
+      address.borough ||
+      ''
+
+    const detectedCity =
+      address.city ||
+      address.town ||
+      address.municipality ||
+      address.county ||
+      fallbackName
+
+    suburb.value = detectedSuburb
+    location.value = detectedCity
+  } catch (error) {
+    console.error('Failed to reverse geocode location', error)
+    suburb.value = ''
+    location.value = fallbackName
+  }
+}
 
 const fetchUvData = async ({ latitude, longitude, name }) => {
   apiError.value = ''
   location.value = name
+  suburb.value = ''
 
   try {
+    await getReadableLocation(latitude, longitude, name)
+
     const params = new URLSearchParams({
       latitude: String(latitude),
       longitude: String(longitude),
@@ -218,10 +266,12 @@ const fetchUvData = async ({ latitude, longitude, name }) => {
 const getLocation = () => {
   if (!navigator.geolocation) {
     location.value = 'Location not supported'
+    suburb.value = ''
     return
   }
 
   location.value = 'Detecting location...'
+  suburb.value = ''
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
@@ -233,6 +283,12 @@ const getLocation = () => {
     },
     () => {
       location.value = 'Location permission denied'
+      suburb.value = ''
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000,
     }
   )
 }
@@ -260,36 +316,42 @@ const uvData = computed(() => {
     return {
       category: 'Low',
       color: '#A8CF16',
-      message: 'UV is pretty chill right now. You are likely fine for the moment, but SPF is still a good call.',
+      message:
+        'UV is pretty chill right now. You are likely fine for the moment, but SPF is still a good call.',
     }
   } else if (uv <= 5) {
     return {
       category: 'Moderate',
       color: '#FFBC01',
-      message: 'The sun is starting to mean business. A little sunscreen now will save you later.',
+      message:
+        'The sun is starting to mean business. A little sunscreen now will save you later.',
     }
   } else if (uv <= 7) {
     return {
       category: 'High',
       color: '#FE7200',
-      message: 'UV is high, so your skin is definitely on the clock. Shade, SPF, and sunnies are your best friends.',
+      message:
+        'UV is high, so your skin is definitely on the clock. Shade, SPF, and sunnies are your best friends.',
     }
   } else if (uv <= 10) {
     return {
       category: 'Very High',
       color: '#C43108',
-      message: 'This is strong sun territory. Staying out too long without protection is a fast track to a burn.',
+      message:
+        'This is strong sun territory. Staying out too long without protection is a fast track to a burn.',
     }
   } else {
     return {
       category: 'Extreme',
       color: '#8C1CC7',
-      message: 'UV is absolutely intense right now. If you are heading out, go full protection mode.',
+      message:
+        'UV is absolutely intense right now. If you are heading out, go full protection mode.',
     }
   }
 })
 
 const uvCategory = computed(() => uvData.value.category)
+
 const estimateDamageMinutes = (uv) => {
   if (uv <= 2) return null
   if (uv <= 5) return 45
@@ -349,7 +411,11 @@ const chartPoints = computed(() => {
   const usableHeight = height - paddingY * 2
 
   return weeklyForecast.value.map((item, index) => {
-    const x = paddingX + (index * usableWidth) / (weeklyForecast.value.length - 1)
+    const x =
+      weeklyForecast.value.length > 1
+        ? paddingX + (index * usableWidth) / (weeklyForecast.value.length - 1)
+        : width / 2
+
     const y = height - paddingY - (item.value / maxValue) * usableHeight
     return { x, y }
   })
@@ -514,10 +580,17 @@ const areaPoints = computed(() => {
 }
 
 .location {
-  margin: 0.95rem 0 0.25rem;
+  margin: 0.95rem 0 0.2rem;
   font-size: clamp(1.05rem, 1.6vw, 1.35rem);
   font-weight: 600;
   color: #111827;
+}
+
+.suburb-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #475569;
 }
 
 .temp {
