@@ -107,9 +107,41 @@
             matter way more than you think.
           </p>
         </section>
-      </section>
 
-      
+        <section class="glass-card share-card">
+          <div class="share-copy">
+            <p class="section-label">Spread the message</p>
+            <h3>Share HelioSafe with your friends</h3>
+            <p class="share-description">
+              Help your friends stay sun-smart too. Follow HelioSafe on Instagram and share the page
+              so more people can stay aware, protected, and safe in the sun.
+            </p>
+            <p class="share-line">
+              Because good skin habits are better when everyone’s doing them.
+            </p>
+          </div>
+
+          <div class="share-actions">
+            <a
+              href="https://www.instagram.com/heliosafe_ig?igsh=MTBhejVwcXM5YmlyMw=="
+              target="_blank"
+              rel="noopener noreferrer"
+              class="share-btn insta-btn"
+            >
+              Follow Instagram Page
+            </a>
+
+            <a
+              href="https://www.instagram.com/heliosafe.channel"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="share-btn channel-btn"
+            >
+              Visit Instagram Channel
+            </a>
+          </div>
+        </section>
+      </section>
     </main>
   </div>
 </template>
@@ -129,8 +161,13 @@ const apiError = ref('')
 const skinCancerImpact = ref([])
 const ageImpact = ref([])
 
-const maxImpactValue = computed(() => Math.max(...skinCancerImpact.value.map((item) => item.value), 1))
-const maxAgeValue = computed(() => Math.max(...ageImpact.value.map((item) => item.value), 1))
+const maxImpactValue = computed(() =>
+  Math.max(...skinCancerImpact.value.map((item) => item.value), 1)
+)
+
+const maxAgeValue = computed(() =>
+  Math.max(...ageImpact.value.map((item) => item.value), 1)
+)
 
 const pageBackground = computed(() => ({
   background: `linear-gradient(
@@ -274,7 +311,8 @@ onMounted(() => {
 }
 
 .intro-card,
-.insight-card {
+.insight-card,
+.share-card {
   border-radius: 1.8rem;
   padding: 1.4rem 1.25rem;
 }
@@ -291,7 +329,8 @@ onMounted(() => {
 
 .intro-card h2,
 .insight h3,
-.card-header h3 {
+.card-header h3,
+.share-card h3 {
   margin: 0;
   color: #111827;
 }
@@ -303,7 +342,8 @@ onMounted(() => {
 
 .intro-copy,
 .insight p,
-.chart-explainer {
+.chart-explainer,
+.share-description {
   color: #334155;
   line-height: 1.5;
 }
@@ -479,12 +519,67 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.share-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+}
+
+.share-copy {
+  flex: 1;
+}
+
+.share-description {
+  margin: 0.7rem 0 0.45rem;
+  font-size: 1rem;
+  max-width: 680px;
+}
+
 .share-line {
-  margin: 0.45rem 0 0;
-  font-size: 0.9rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
   color: #334155;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.share-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 230px;
+}
+
+.share-btn {
+  min-height: 48px;
+  padding: 0.85rem 1.1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.share-btn:hover {
+  transform: translateY(-2px);
+}
+
+.insta-btn {
+  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4);
+  color: white;
+  box-shadow: 0 10px 22px rgba(221, 42, 123, 0.22);
+}
+
+.channel-btn {
+  background: rgba(255, 255, 255, 0.78);
+  color: #1e1b4b;
+  border: 1px solid rgba(30, 27, 75, 0.12);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
 }
 
 @media (max-width: 980px) {
@@ -492,9 +587,19 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .insight-card {
+  .insight-card,
+  .share-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .share-actions {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .share-btn {
+    width: 100%;
   }
 }
 
