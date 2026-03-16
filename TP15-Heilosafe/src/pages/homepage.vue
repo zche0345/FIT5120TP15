@@ -32,6 +32,12 @@
             <p class="hero-label">Live UV Update</p>
             <h2 class="hero-title">Your skin has entered the chat.</h2>
             <p class="uv-message">{{ uvMessage }}</p>
+
+            <div class="hero-alert-banner">
+              <span class="alert-icon">⚠</span>
+              <p>{{ damageAlert }}</p>
+            </div>
+
             <p v-if="apiError" class="api-error">{{ apiError }}</p>
           </div>
 
@@ -185,6 +191,14 @@ const MELBOURNE_COORDS = {
   latitude: -37.8136,
   longitude: 144.9631,
   name: 'Melbourne',
+}
+
+const UV_COLORS = {
+  low: '#9CC600',
+  moderate: '#FFC82F',
+  high: '#FE7200',
+  veryHigh: '#C43108',
+  extreme: '#8C1CC7',
 }
 
 const useCognito = import.meta.env.VITE_USE_COGNITO === 'true'
@@ -358,35 +372,35 @@ const uvData = computed(() => {
   if (uv <= 2) {
     return {
       category: 'Low',
-      color: '#A8CF16',
+      color: UV_COLORS.low,
       message:
         'Pretty chill right now. Risk is lower, but SPF is still a smart move.',
     }
   } else if (uv <= 5) {
     return {
       category: 'Moderate',
-      color: '#FFBC01',
+      color: UV_COLORS.moderate,
       message:
         'The sun is picking up. A little protection now will save you later.',
     }
   } else if (uv <= 7) {
     return {
       category: 'High',
-      color: '#FE7200',
+      color: UV_COLORS.high,
       message:
         'UV is high, so your skin is definitely clocking in. SPF, sunnies, and shade would be a good idea.',
     }
   } else if (uv <= 10) {
     return {
       category: 'Very High',
-      color: '#C43108',
+      color: UV_COLORS.veryHigh,
       message:
         'This is strong sun territory. Staying out too long without protection is asking for trouble.',
     }
   } else {
     return {
       category: 'Extreme',
-      color: '#8C1CC7',
+      color: UV_COLORS.extreme,
       message:
         'UV is intense right now. If you are heading out, this is full-protection mode.',
     }
@@ -403,27 +417,49 @@ const estimateDamageMinutes = (uv) => {
   return 10
 }
 
-const uvMessage = computed(() => {
+const damageAlert = computed(() => {
   const uv = Number(uvIndex.value)
   const minutes = estimateDamageMinutes(uv)
 
   if (!minutes) {
-    return 'UV is low right now. You are not exactly in instant-burn mode, but daily SPF is still the smart move.'
+    return 'UV is low right now. Damage risk is lower, but daily sunscreen is still a smart move.'
   }
 
   if (uv <= 5) {
-    return `UV is climbing. Your skin could start taking damage in about ${minutes} minutes, so maybe do not leave the sunscreen for later.`
+    return `Your skin could start taking damage in about ${minutes} minutes, so sunscreen up before heading out.`
   }
 
   if (uv <= 7) {
-    return `Your skin could start taking damage in around ${minutes} minutes. SPF up, grab your sunnies, and try not to roast out there.`
+    return `Your skin could start taking damage in around ${minutes} minutes. SPF, sunnies, and shade would be a very good idea.`
   }
 
   if (uv <= 10) {
-    return `Your skin could start taking damage in about ${minutes} minutes. Shade would be a really good idea right now.`
+    return `Your skin could start taking damage in about ${minutes} minutes. Find shade now and limit direct sun exposure.`
   }
 
-  return `Your skin could start taking damage in as little as ${minutes} minutes. This is your sign to avoid direct sun and go full protection mode.`
+  return `Your skin could start taking damage in as little as ${minutes} minutes. Avoid direct sun and go full protection mode.`
+})
+
+const uvMessage = computed(() => {
+  const uv = Number(uvIndex.value)
+
+  if (uv <= 2) {
+    return 'The UV is fairly low right now, but daily sun protection is still a good habit.'
+  }
+
+  if (uv <= 5) {
+    return 'The sun is getting stronger, so this is where protection starts to matter more.'
+  }
+
+  if (uv <= 7) {
+    return 'UV is high right now, and unprotected exposure can add up faster than you think.'
+  }
+
+  if (uv <= 10) {
+    return 'This is strong sun territory, so staying out too long without protection is risky.'
+  }
+
+  return 'The UV is extreme right now, so full protection and limited exposure are the safest move.'
 })
 
 const pageBackground = computed(() => ({
@@ -437,11 +473,11 @@ const pageBackground = computed(() => ({
 }))
 
 const getUvColor = (uv) => {
-  if (uv <= 2) return '#A8CF16'
-  if (uv <= 5) return '#FFBC01'
-  if (uv <= 7) return '#FE7200'
-  if (uv <= 10) return '#C43108'
-  return '#8C1CC7'
+  if (uv <= 2) return UV_COLORS.low
+  if (uv <= 5) return UV_COLORS.moderate
+  if (uv <= 7) return UV_COLORS.high
+  if (uv <= 10) return UV_COLORS.veryHigh
+  return UV_COLORS.extreme
 }
 
 const chartPoints = computed(() => {
@@ -705,6 +741,31 @@ const areaPoints = computed(() => {
   font-weight: 500;
   color: #0f172a;
   max-width: 680px;
+}
+
+.hero-alert-banner {
+  margin-top: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+}
+
+.hero-alert-banner p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 700;
+  color: #111827;
+}
+
+.alert-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  margin-top: 0.05rem;
 }
 
 .api-error {
@@ -1042,6 +1103,10 @@ const areaPoints = computed(() => {
   .action-btn {
     min-height: 46px;
     font-size: 0.93rem;
+  }
+
+  .hero-alert-banner p {
+    font-size: 0.95rem;
   }
 }
 </style>
