@@ -32,6 +32,13 @@
           >
             By Age Group
           </button>
+          <button
+            class="tab-btn"
+            :class="{ active: activeView === 'uv' }"
+            @click="activeView = 'uv'"
+          >
+            UV Trends
+          </button>
         </div>
       </section>
 
@@ -76,7 +83,7 @@
           </p>
         </section>
 
-        <section v-else-if="!loading && !apiError" class="glass-card chart-card">
+        <section v-else-if="activeView === 'age'" class="glass-card chart-card">
           <div class="card-header">
             <div>
               <p class="section-label">Australia by age</p>
@@ -105,6 +112,85 @@
           <p class="chart-explainer">
             Skin damage is sneaky. It builds up bit by bit, so the habits you have now actually
             matter way more than you think.
+          </p>
+        </section>
+
+        <section v-else class="glass-card chart-card">
+          <div class="card-header">
+            <div>
+              <p class="section-label">Australia over time</p>
+              <h3>Average UV index by year</h3>
+            </div>
+            <div class="mini-badge">Trend view</div>
+          </div>
+
+          <div class="trend-chart-shell">
+            <div class="trend-scale">
+              <span>{{ maxUvValue.toFixed(2) }}</span>
+              <span>{{ midpointUvValue.toFixed(2) }}</span>
+              <span>{{ minUvValue.toFixed(2) }}</span>
+            </div>
+
+            <div class="trend-chart">
+              <svg
+                class="trend-svg"
+                viewBox="0 0 760 320"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="Line chart showing average UV index in Australia by year"
+              >
+                <line
+                  v-for="gridLine in trendGridLines"
+                  :key="gridLine"
+                  x1="56"
+                  :y1="gridLine"
+                  x2="720"
+                  :y2="gridLine"
+                  class="trend-grid-line"
+                />
+                <polyline
+                  :points="uvTrendAreaPoints"
+                  class="trend-area"
+                />
+                <polyline
+                  :points="uvTrendLinePoints"
+                  class="trend-line"
+                />
+                <circle
+                  v-for="point in uvTrendPoints"
+                  :key="point.label"
+                  :cx="point.x"
+                  :cy="point.y"
+                  r="5"
+                  class="trend-point"
+                />
+              </svg>
+
+              <div class="trend-x-axis">
+                <div
+                  v-for="item in uvTrend"
+                  :key="item.label"
+                  class="trend-x-label"
+                >
+                  {{ item.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="trend-summary-row">
+            <div
+              v-for="item in uvTrend"
+              :key="`${item.label}-${item.value}`"
+              class="trend-stat-chip"
+            >
+              <span class="trend-stat-year">{{ item.label }}</span>
+              <strong class="trend-stat-value">{{ item.value.toFixed(2) }}</strong>
+            </div>
+          </div>
+
+          <p class="chart-explainer">
+            This trend view shows how average UV levels in Australia have changed over time.
           </p>
         </section>
 
@@ -160,6 +246,7 @@ const apiError = ref('')
 
 const skinCancerImpact = ref([])
 const ageImpact = ref([])
+const uvTrend = ref([])
 
 const maxImpactValue = computed(() =>
   Math.max(...skinCancerImpact.value.map((item) => item.value), 1)
@@ -168,6 +255,56 @@ const maxImpactValue = computed(() =>
 const maxAgeValue = computed(() =>
   Math.max(...ageImpact.value.map((item) => item.value), 1)
 )
+
+const maxUvValue = computed(() =>
+  Math.max(...uvTrend.value.map((item) => item.value), 1)
+)
+
+const minUvValue = computed(() =>
+  uvTrend.value.length ? Math.min(...uvTrend.value.map((item) => item.value)) : 0
+)
+
+const midpointUvValue = computed(() => (maxUvValue.value + minUvValue.value) / 2)
+const trendGridLines = [36, 150, 264]
+
+const uvTrendPoints = computed(() => {
+  if (!uvTrend.value.length) return []
+
+  const chartWidth = 664
+  const chartHeight = 228
+  const startX = 56
+  const startY = 36
+  const denominator = Math.max(uvTrend.value.length - 1, 1)
+  const valueRange = Math.max(maxUvValue.value - minUvValue.value, 0.01)
+
+  return uvTrend.value.map((item, index) => {
+    const x = startX + (index / denominator) * chartWidth
+    const y = startY + ((maxUvValue.value - item.value) / valueRange) * chartHeight
+
+    return {
+      ...item,
+      x,
+      y,
+    }
+  })
+})
+
+const uvTrendLinePoints = computed(() =>
+  uvTrendPoints.value.map((point) => `${point.x},${point.y}`).join(' ')
+)
+
+const uvTrendAreaPoints = computed(() => {
+  if (!uvTrendPoints.value.length) return ''
+
+  const firstPoint = uvTrendPoints.value[0]
+  const lastPoint = uvTrendPoints.value[uvTrendPoints.value.length - 1]
+
+  return [
+    `${firstPoint.x},264`,
+    ...uvTrendPoints.value.map((point) => `${point.x},${point.y}`),
+    `${lastPoint.x},264`,
+  ].join(' ')
+})
 
 const pageBackground = computed(() => ({
   background: `linear-gradient(
@@ -196,22 +333,28 @@ const fetchAwarenessData = async () => {
   apiError.value = ''
 
   try {
-    const [stateResponse, ageResponse] = await Promise.all([
+    const [stateResponse, ageResponse, yearResponse] = await Promise.all([
       fetch(`${API_BASE_URL}/awareness/state-impact`),
       fetch(`${API_BASE_URL}/awareness/age-impact`),
+      fetch(`${API_BASE_URL}/awareness/year-impact`),
     ])
 
-    if (!stateResponse.ok || !ageResponse.ok) {
+    if (!stateResponse.ok || !ageResponse.ok || !yearResponse.ok) {
       throw new Error('Unable to load awareness data right now.')
     }
 
-    const [stateData, ageData] = await Promise.all([
+    const [stateData, ageData, yearData] = await Promise.all([
       stateResponse.json(),
       ageResponse.json(),
+      yearResponse.json(),
     ])
 
     skinCancerImpact.value = stateData.items ?? []
     ageImpact.value = ageData.items ?? []
+    uvTrend.value = (yearData.items ?? []).map((item) => ({
+      label: String(item.label),
+      value: Number(item.value),
+    }))
   } catch (error) {
     console.error('Failed to load awareness data', error)
     apiError.value = 'Awareness data could not be loaded right now. Please try again in a bit.'
@@ -485,6 +628,104 @@ onMounted(() => {
   max-width: 820px;
 }
 
+.trend-chart-shell {
+  min-height: 320px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  padding-top: 0.5rem;
+}
+
+.trend-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.4rem 0 3rem;
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.trend-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.trend-svg {
+  width: 100%;
+  height: 320px;
+  overflow: visible;
+}
+
+.trend-grid-line {
+  stroke: rgba(71, 85, 105, 0.2);
+  stroke-width: 1;
+  stroke-dasharray: 6 8;
+}
+
+.trend-area {
+  fill: rgba(37, 99, 235, 0.14);
+  stroke: none;
+}
+
+.trend-line {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-point {
+  fill: #ffffff;
+  stroke: #1d4ed8;
+  stroke-width: 3;
+}
+
+.trend-x-axis {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding-left: 0.25rem;
+}
+
+.trend-x-label {
+  text-align: center;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.trend-summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+}
+
+.trend-stat-chip {
+  padding: 0.8rem 0.9rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.trend-stat-year {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.trend-stat-value {
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
 .insight-card {
   display: flex;
   align-items: center;
@@ -632,6 +873,22 @@ onMounted(() => {
 
   .age-chart {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .trend-chart-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-scale {
+    display: none;
+  }
+
+  .trend-x-axis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .trend-summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
